@@ -21,6 +21,12 @@ class CronExpressionTest extends TestCase
         $this->assertSame('0 0 1 1 *', CronExpression::factory('@annually')->getExpression());
         $this->assertSame('0 0 1 1 *', CronExpression::factory('@yearly')->getExpression());
         $this->assertSame('0 0 * * 0', CronExpression::factory('@weekly')->getExpression());
+        $this->assertSame('0 0 * * *', CronExpression::factory('@daily')->getExpression());
+        $this->assertSame('0 * * * *', CronExpression::factory('@hourly')->getExpression());
+        $this->assertSame('0 0 * * 0', CronExpression::factory('@sundays')->getExpression());
+        $this->assertSame('10 22 * * 1-5', CronExpression::factory('@weekdays(22:10)')->getExpression());
+        $this->assertSame('30 13 * * *', CronExpression::factory('@daily(13:30)')->getExpression());
+        $this->assertSame('15 * * * *', CronExpression::factory('@hourly(15)')->getExpression());
     }
 
     /**
@@ -277,7 +283,7 @@ class CronExpressionTest extends TestCase
         $this->assertTrue($cron->isDue(new DateTime($date, new DateTimeZone('Asia/Tokyo')), 'Asia/Tokyo'));
     }
 
-   /**
+    /**
      * @covers Cron\CronExpression::isDue
      */
     public function testIsDueHandlesDifferentTimezonesAsArgument()
@@ -322,7 +328,6 @@ class CronExpressionTest extends TestCase
         $dtCurrent = \DateTimeImmutable::createFromFormat("!Y-m-d H:i:s", "2017-10-17 10:00:00", $tzServer);
         $dtPrev = $cron->getPreviousRunDate($dtCurrent->format("\@U"), 0, true, $tzCron);
         $this->assertEquals('1508151600 : 2017-10-16T07:00:00-04:00 : America/New_York', $dtPrev->format("U \: c \: e"));
-
     }
 
 
@@ -365,7 +370,8 @@ class CronExpressionTest extends TestCase
      * @covers \Cron\CronExpression::getMultipleRunDates
      * @covers \Cron\CronExpression::setMaxIterationCount
      */
-    public function testProvidesMultipleRunDatesForTheFarFuture() {
+    public function testProvidesMultipleRunDatesForTheFarFuture()
+    {
         // Fails with the default 1000 iteration limit
         $cron = CronExpression::factory('0 0 12 1 *');
         $cron->setMaxIterationCount(2000);
@@ -450,7 +456,8 @@ class CronExpressionTest extends TestCase
     /**
      * @see https://github.com/mtdowling/cron-expression/issues/20
      */
-    public function testIssue20() {
+    public function testIssue20()
+    {
         $e = CronExpression::factory('* * * * MON#1');
         $this->assertTrue($e->isDue(new DateTime('2014-04-07 00:00:00')));
         $this->assertFalse($e->isDue(new DateTime('2014-04-14 00:00:00')));
@@ -492,6 +499,18 @@ class CronExpressionTest extends TestCase
         $this->assertFalse(CronExpression::isValidExpression('* * * 1'));
         // Valid
         $this->assertTrue(CronExpression::isValidExpression('* * * * 1'));
+        // Valid. Special predefined values
+        $this->assertTrue(CronExpression::isValidExpression('@daily'));
+        $this->assertTrue(CronExpression::isValidExpression('@daily(10:00)'));
+        $this->assertTrue(CronExpression::isValidExpression('@weekends'));
+        $this->assertTrue(CronExpression::isValidExpression('@everyMinute'));
+        $this->assertTrue(CronExpression::isValidExpression('@hourly(10)'));
+        // Invalid. Special predefined values
+        $this->assertFalse(CronExpression::isValidExpression('@daily(24:10)'));
+        $this->assertFalse(CronExpression::isValidExpression('@daily(10)'));
+        $this->assertFalse(CronExpression::isValidExpression('@hourly(10:00)'));
+        $this->assertFalse(CronExpression::isValidExpression('@daily(HH:MM)'));
+        $this->assertFalse(CronExpression::isValidExpression('@hourly(MM)'));
 
         // Issue #156, 13 is an invalid month
         $this->assertFalse(CronExpression::isValidExpression("* * * 13 * "));

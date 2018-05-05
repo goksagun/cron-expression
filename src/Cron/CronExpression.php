@@ -51,6 +51,32 @@ class CronExpression
     private static $order = array(self::YEAR, self::MONTH, self::DAY, self::WEEKDAY, self::HOUR, self::MINUTE);
 
     /**
+     * @var array Special predefined expressions
+     */
+    private static $mappings = array(
+        '@yearly' => '0 0 1 1 *',
+        '@annually' => '0 0 1 1 *',
+        '@monthly' => '0 0 1 * *',
+        '@weekly' => '0 0 * * 0',
+        '@daily' => '0 0 * * *',
+        '@mondays' => '0 0 * * 1',
+        '@tuesdays' => '0 0 * * 2',
+        '@wednesdays' => '0 0 * * 3',
+        '@thursdays' => '0 0 * * 4',
+        '@fridays' => '0 0 * * 5',
+        '@saturdays' => '0 0 * * 6',
+        '@sundays' => '0 0 * * 0',
+        '@weekdays' => '0 0 * * 1-5',
+        '@weekends' => '0 0 * * 6-7',
+        '@hourly' => '0 * * * *',
+        '@everyMinute' => '* * * * *',
+        '@everyFiveMinutes' => '*/5 * * * *',
+        '@everyTenMinutes' => '*/10 * * * *',
+        '@everyFifteenMinutes' => '*/15 * * * *',
+        '@everyThirtyMinutes' => '*/30 * * * *',
+    );
+
+    /**
      * Factory method to create a new CronExpression.
      *
      * @param string $expression The CRON expression to create.  There are
@@ -60,28 +86,75 @@ class CronExpression
      *      `@yearly`, `@annually` - Run once a year, midnight, Jan. 1 - 0 0 1 1 *
      *      `@monthly` - Run once a month, midnight, first of month - 0 0 1 * *
      *      `@weekly` - Run once a week, midnight on Sun - 0 0 * * 0
+     *      `@weekdays` - Run once every weekday, midnight - 0 0 * * 1-5
+     *      `@weekends` - Run once every weekend, midnight - 0 0 * * 6-7
      *      `@daily` - Run once a day, midnight - 0 0 * * *
+     *      `@mondays` - Run once every monday, midnight - 0 0 * * 1
+     *      `@tuesdays` - Run once every tuesday, midnight - 0 0 * * 2
+     *      `@wednesdays` - Run once every wednesday, midnight - 0 0 * * 3
+     *      `@thursdays` - Run once every thursday, midnight - 0 0 * * 4
+     *      `@fridays` - Run once every fridays, midnight - 0 0 * * 5
+     *      `@saturdays` - Run once every saturdays, midnight - 0 0 * * 6
+     *      `@sundays` - Run once every sundays, midnight - 0 0 * * 7
      *      `@hourly` - Run once an hour, first minute - 0 * * * *
+     *      `@everyThirtyMinutes` - Run once every thirty minute - *\/30 * * * *
+     *      `@everyFifteenMinutes` - Run once every fifteen minute - *\/15 * * * *
+     *      `@everyTenMinutes` - Run once every ten minute - *\/10 * * * *
+     *      `@everyFiveMinutes` - Run once every five minute - *\/5 * * * *
+     *      `@everyMinute` - Run once every one minute - * * * * *
      * @param FieldFactory $fieldFactory Field factory to use
      *
      * @return CronExpression
      */
     public static function factory($expression, FieldFactory $fieldFactory = null)
     {
-        $mappings = array(
-            '@yearly' => '0 0 1 1 *',
-            '@annually' => '0 0 1 1 *',
-            '@monthly' => '0 0 1 * *',
-            '@weekly' => '0 0 * * 0',
-            '@daily' => '0 0 * * *',
-            '@hourly' => '0 * * * *'
-        );
+        return new static(self::getMappedExpression($expression), $fieldFactory ?: new FieldFactory());
+    }
 
-        if (isset($mappings[$expression])) {
-            $expression = $mappings[$expression];
+    /**
+     * Get CronExpression mapping.
+     *
+     * @param string $expression The CRON expression to create.
+     * 
+     * @return string
+     */
+    public static function getMappedExpression($expression)
+    {
+        $time = null;
+        // Capture cron expression time inside parenthesis if exists.
+        if (preg_match('/\((.*?)\)/', $expression, $matches)) {
+            $time = end($matches);
         }
 
-        return new static($expression, $fieldFactory ?: new FieldFactory());
+        // Capture cron expression if it's a special expression.
+        if (preg_match('/(?=@)(.*)(?=\()/', $expression, $matches)) {
+            $expression = end($matches);
+        }
+
+        // If expression is predefined get it.
+        if (array_key_exists($expression, self::$mappings)) {
+            $expression = self::$mappings[$expression];
+        }
+
+        // If cron expression has a special time add time to expression.
+        if (null !== $time) {
+            $time = explode(':', $time);
+            $parts = explode(' ', $expression);
+
+            // Set invalid value if time is not valid format.
+            if ($parts[0] == '0' && $parts[1] == '0') {
+                $parts[0] = isset($time[1]) && is_numeric($time[1]) ? (int) $time[1] : '99';
+                $parts[1] = isset($time[0]) && is_numeric($time[0]) ? (int) $time[0] : '99';
+            } elseif ($parts[0] == '0' && count($time) == 1) {
+                $parts[0] = isset($time[0]) && is_numeric($time[0]) ? (int) $time[0] : '99';
+            } else {
+                $parts[0] = '99';
+            }
+
+            $expression = implode(' ', $parts);
+        }
+
+        return $expression;
     }
 
     /**
@@ -350,7 +423,6 @@ class CronExpression
 
         // Set a hard limit to bail on an impossible date
         for ($i = 0; $i < $this->maxIterationCount; $i++) {
-
             foreach ($parts as $position => $part) {
                 $satisfied = false;
                 // Get the field object used to validate this part
@@ -402,7 +474,7 @@ class CronExpression
             return $timeZone;
         }
 
-        if ($currentTime instanceOf Datetime) {
+        if ($currentTime instanceof Datetime) {
             return $currentTime->getTimeZone()->getName();
         }
 
